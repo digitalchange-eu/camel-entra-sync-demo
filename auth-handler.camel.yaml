@@ -1,0 +1,94 @@
+- route:
+    id: route-get-token
+    from:
+      uri: direct
+      parameters:
+        name: getToken
+      steps:
+        - script:
+            expression:
+              groovy:
+                expression: |
+                  long now = (long)System.currentTimeMillis()/1000
+                  long expiresAt = exchange.getVariable("route:expiresAt") ?: 0
+
+                  long gracePeriod = {{token_grace_period}}
+                  boolean expired = (now + gracePeriod) >= expiresAt
+
+                  exchange.setProperty('now', now)
+                  exchange.setProperty('expiresAt', expiresAt)
+                  exchange.setProperty('expiresIn', expiresAt-now)
+                  exchange.setProperty('gracePeriod', gracePeriod)
+                  exchange.setProperty('expired', expired)
+        - log:
+            loggingLevel: INFO
+            message: "Checking token expiration: now: ${exchangeProperty.now}, expiresAt:
+              ${exchangeProperty.expiresAt}, gracePeriod:
+              ${exchangeProperty.gracePeriod}, expired:
+              ${exchangeProperty.expired}"
+        - choice:
+            otherwise:
+              description: use existing token
+              steps:
+                - log:
+                    message: Using cached token (expires in ${exchangeProperty.expiresIn} seconds).
+            when:
+              - description: retreive a new token
+                steps:
+                  - log:
+                      loggingLevel: INFO
+                      message: Token is expired or about to expire. Fetching a new one.
+                  - to:
+                      uri: direct
+                      parameters:
+                        name: fetchToken
+                  - script:
+                      expression:
+                        groovy:
+                          expression: >-
+                            long expiresAt = (System.currentTimeMillis()/1000) +
+                            body.expires_in
+
+
+                            exchange.setProperty('expiresAt', expiresAt)
+
+                            exchange.setProperty('expiresIn', body.expires_in)
+
+
+                            exchange.setVariable('route:expiresAt', expiresAt)
+
+                            exchange.setVariable('route:token',
+                            body.access_token)
+
+                            exchange.in.body = null
+                  - log:
+                      message: New token obtained successfully (expires in
+                        ${exchangeProperty.expiresIn} seconds).
+                expression:
+                  groovy:
+                    expression: exchangeProperty.expired
+        - removeHeaders:
+            pattern: "*"
+        - setHeader:
+            expression:
+              groovy:
+                expression: "\"Bearer ${exchange.getVariable('route:token')}\""
+            name: Authorization
+- route:
+    id: route-fetch-token
+    from:
+      uri: direct
+      parameters:
+        name: fetchToken
+      steps:
+        - setBody:
+            expression:
+              simple:
+                expression: client_id={{ms.graph.client_id}}&scope=https://graph.microsoft.com/.default&client_secret={{ms.graph.client_secret}}&grant_type=client_credentials
+        - to:
+            uri: https
+            parameters:
+              httpMethod: POST
+              httpUri: "{{ms.login.uri}}"
+        - unmarshal:
+            json: {}

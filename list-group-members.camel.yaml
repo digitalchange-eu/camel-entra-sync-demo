@@ -1,0 +1,75 @@
+- route:
+    id: route-4231
+    from:
+      uri: timer
+      parameters:
+        period: "1000"
+        repeatCount: "1"
+        timerName: timer
+      steps:
+        - to:
+            uri: direct
+            parameters:
+              name: getToken
+              timeout: "5000"
+        - to:
+            uri: https
+            parameters:
+              httpMethod: GET
+              httpUri: https://graph.microsoft.com/v1.0/groups?$filter=displayName eq
+                '{{ad_group.display_name}}'&$select=id,displayName
+        - unmarshal:
+            json:
+              prettyPrint: false
+        - setProperty:
+            expression:
+              simple:
+                expression: ${body[value][0][id]}
+            name: group-id
+        - removeHeaders:
+            excludePattern: Authorization
+            pattern: "*"
+        - setHeaders:
+            headers:
+              - expression:
+                  simple:
+                    expression: /v1.0/groups/${exchangeProperty.group-id}/transitiveMembers
+                name: CamelHttpPath
+              - expression:
+                  constant:
+                    expression: $select=id,userPrincipalName,displayName
+                name: CamelRestHttpQuery
+        - to:
+            uri: https
+            parameters:
+              httpMethod: GET
+              httpUri: https://graph.microsoft.com
+        - unmarshal:
+            json: {}
+        - setBody:
+            expression:
+              simple:
+                expression: ${body[value]}
+        - setBody:
+            description: Filter for users only
+            expression:
+              groovy:
+                expression: |-
+                  body.findAll { entry ->
+                    entry.'@odata.type' == '#microsoft.graph.user'
+                  }
+        - marshal:
+            csv:
+              header:
+                - id
+                - displayName
+                - userPrincipalName
+              headerDisabled: false
+        - to:
+            uri: file
+            parameters:
+              directoryName: "."
+              fileName: group-members.csv
+        - log:
+            message: Group members of {{ad_group.display_name}} written to
+              ${header.CamelFileNameProduced}
