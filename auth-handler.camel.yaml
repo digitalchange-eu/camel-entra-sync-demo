@@ -45,25 +45,18 @@
                   - script:
                       expression:
                         groovy:
-                          expression: >-
-                            long expiresAt = (System.currentTimeMillis()/1000) +
-                            body.expires_in
-
-
+                          expression: |
+                            long expiresAt = (System.currentTimeMillis()/1000) + body.expires_in
+                            
                             exchange.setProperty('expiresAt', expiresAt)
-
                             exchange.setProperty('expiresIn', body.expires_in)
 
-
                             exchange.setVariable('route:expiresAt', expiresAt)
-
-                            exchange.setVariable('route:token',
-                            body.access_token)
-
+                            exchange.setVariable('route:token', body.access_token)
+                            
                             exchange.in.body = null
                   - log:
-                      message: New token obtained successfully (expires in
-                        ${exchangeProperty.expiresIn} seconds).
+                      message: New token obtained successfully (expires in ${exchangeProperty.expiresIn} seconds).
                 expression:
                   groovy:
                     expression: exchangeProperty.expired
