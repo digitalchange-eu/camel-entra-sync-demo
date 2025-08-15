@@ -33,7 +33,7 @@
                 - log:
                     message: Using cached token (expires in ${exchangeProperty.expiresIn} seconds).
             when:
-              - description: retreive a new token
+              - description: retrieve a new token
                 steps:
                   - log:
                       loggingLevel: INFO
